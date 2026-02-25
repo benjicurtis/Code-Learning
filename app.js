@@ -271,16 +271,8 @@
           <button class="btn btn-primary" id="free-run">Run Code</button>
           <button class="btn btn-primary" id="free-download">Download</button>
           <button class="btn btn-secondary" id="free-reset">Reset to default</button>
-          <button class="btn btn-secondary" id="free-fix-help">Get help fixing</button>
         </div>
         <div class="output" id="free-output"></div>
-        <div id="free-fix-panel" style="display:none;margin-top:1rem;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1.25rem">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem">
-            <strong>Fix help</strong>
-            <button class="btn btn-secondary btn-sm" id="free-fix-close">Close</button>
-          </div>
-          <div id="free-fix-content" style="line-height:1.6;white-space:pre-wrap"></div>
-        </div>
       </main>
     `;
 
@@ -330,48 +322,6 @@
       render();
     });
     el.querySelector('[style*="display:flex"]').appendChild(shareBtn);
-
-    const fixHelpBtn = el.querySelector('#free-fix-help');
-    const fixPanel = el.querySelector('#free-fix-panel');
-    const fixContent = el.querySelector('#free-fix-content');
-    const fixCloseBtn = el.querySelector('#free-fix-close');
-    const outputEl = el.querySelector('#free-output');
-
-    fixHelpBtn.addEventListener('click', async () => {
-      const code = textarea.value.trim();
-      if (!code) {
-        fixContent.textContent = 'Add some code first.';
-        fixPanel.style.display = 'block';
-        return;
-      }
-      const errorOutput = outputEl?.textContent?.trim() || '';
-      fixHelpBtn.disabled = true;
-      fixHelpBtn.textContent = 'Getting help...';
-      fixPanel.style.display = 'block';
-      fixContent.textContent = 'Loading...';
-      try {
-        const res = await fetch('/api/fix', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ code, language: lang, errorOutput }),
-        });
-        const data = await res.json();
-        if (!res.ok) {
-          fixContent.textContent = data.error || 'Fix help requires deployment with OPENAI_API_KEY set.';
-          return;
-        }
-        fixContent.textContent = data.fix || 'No suggestion returned.';
-      } catch (err) {
-        fixContent.textContent = 'Failed to get help. Make sure the app is deployed with /api/fix and OPENAI_API_KEY.';
-      } finally {
-        fixHelpBtn.disabled = false;
-        fixHelpBtn.textContent = 'Get help fixing';
-      }
-    });
-
-    fixCloseBtn.addEventListener('click', () => {
-      fixPanel.style.display = 'none';
-    });
 
     return el;
   }
