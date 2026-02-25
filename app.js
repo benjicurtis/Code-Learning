@@ -8,7 +8,8 @@
     gameDesign: { name: 'Game Design', icon: '', desc: 'Read how others design games – no coding' },
     languages: { name: 'Languages', icon: '', desc: 'JavaScript, CSS, Python, HTML' },
     learn: { name: 'Learn', icon: '', desc: 'Read-only lessons – understand concepts step by step' },
-    freeCode: { name: 'Free Code', icon: '', desc: 'Write and download code in any language' }
+    freeCode: { name: 'Free Code', icon: '', desc: 'Write and download code in any language' },
+    codeShare: { name: 'Code Share', icon: '', desc: 'Publish your code, share it, and download others\' code' }
   };
   const CLASS_MODE_ONLY = ['hacker', 'gameDesign']; // these modes only show when class mode is on
   const CLASS_MODE_PATHS = ['gameDesign', 'hacker', 'classes']; // these Learn paths only show when class mode is on
@@ -104,6 +105,8 @@
       app.appendChild(renderFreeCodeLangSelect());
     } else if (state.view === 'freeCode') {
       app.appendChild(renderFreeCode());
+    } else if (state.view === 'codeShare') {
+      app.appendChild(renderCodeShare());
     } else if (state.view === 'infoPathSelect') {
       app.appendChild(renderInfoPathSelect());
     } else if (state.view === 'infoLessons') {
@@ -153,6 +156,8 @@
     } else if (mode === 'hacker' || mode === 'gameDesign') {
       state.infoPath = mode;
       state.view = 'infoLessons';
+    } else if (mode === 'codeShare') {
+      state.view = 'codeShare';
     } else {
       state.language = mode;
       state.view = 'lessons';
@@ -303,6 +308,236 @@
       textarea.value = state.freeCodeContent;
       el.querySelector('#free-output').textContent = '';
     });
+
+    const shareBtn = document.createElement('button');
+    shareBtn.className = 'btn btn-secondary';
+    shareBtn.textContent = 'Publish to Code Share';
+    shareBtn.addEventListener('click', () => {
+      state.shareDraft = {
+        title: 'My code',
+        code: textarea.value,
+        language: lang
+      };
+      state.view = 'codeShare';
+      render();
+    });
+    el.querySelector('[style*="display:flex"]').appendChild(shareBtn);
+
+    return el;
+  }
+
+  function encodeShare(data) {
+    try {
+      const json = JSON.stringify(data);
+      return btoa(unescape(encodeURIComponent(json))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    } catch (e) { return null; }
+  }
+  function decodeShare(str) {
+    try {
+      let s = str.replace(/-/g, '+').replace(/_/g, '/');
+      while (s.length % 4) s += '=';
+      return JSON.parse(decodeURIComponent(escape(atob(s))));
+    } catch (e) { return null; }
+  }
+
+  const CODE_SHARE_EXAMPLES = [
+    { title: 'Hello World (JS)', language: 'javascript', code: 'console.log("Hello, World!");' },
+    { title: 'Counter (HTML)', language: 'html', code: '<!DOCTYPE html>\n<html>\n<body>\n  <p>Count: <span id="n">0</span></p>\n  <button onclick="document.getElementById(\'n\').innerText++">+</button>\n</body>\n</html>' },
+    { title: 'Greet function (Python)', language: 'python', code: 'def greet(name):\n    return f"Hello, {name}!"\nprint(greet("World"))' }
+  ];
+
+  function renderCodeShare() {
+    const draft = state.shareDraft || {};
+    state.shareDraft = null;
+
+    const el = document.createElement('div');
+    el.className = 'layout';
+    el.innerHTML = `
+      <aside class="sidebar">
+        <div class="logo">Code</div>
+        <div class="nav-section">
+          <div class="nav-title">Code Share</div>
+          <button class="nav-btn active">Share & Browse</button>
+        </div>
+        <button class="nav-btn" data-back>← Back</button>
+      </aside>
+      <main class="main">
+        <h1>Code Share</h1>
+        <p style="color:var(--text-dim);margin-bottom:1.5rem">Publish your code and share the link. Load shared links to view and download others' code.</p>
+
+        <section style="margin-bottom:2rem">
+          <h2 style="font-size:1.25rem;margin-bottom:0.75rem">Publish your code</h2>
+          <p style="color:var(--text-dim);margin-bottom:0.75rem;font-size:0.9rem">Add a title, paste your code, choose a language, then Publish to get a shareable link.</p>
+          <input type="text" id="share-title" placeholder="Title (e.g. My calculator)" value="${escapeHtml(draft.title || '')}" style="width:100%;max-width:400px;padding:0.6rem;border:1px solid var(--border);border-radius:8px;margin-bottom:0.75rem;font:inherit">
+          <select id="share-lang" style="padding:0.6rem;border:1px solid var(--border);border-radius:8px;margin-bottom:0.75rem;font:inherit">
+            ${LANGUAGES.map(l => `<option value="${l}" ${(draft.language || 'javascript') === l ? 'selected' : ''}>${TRACK_NAMES[l]}</option>`).join('')}
+          </select>
+          <textarea id="share-code" placeholder="Paste your code here..." style="width:100%;min-height:120px;padding:1rem;border:1px solid var(--border);border-radius:8px;font-family:monospace;font-size:0.9rem;resize:vertical;display:block;margin-bottom:0.75rem">${escapeHtml(draft.code || '')}</textarea>
+          <button class="btn btn-primary" id="share-publish">Publish & copy link</button>
+          <div id="share-publish-msg" style="margin-top:0.5rem;font-size:0.9rem;color:var(--text-dim)"></div>
+        </section>
+
+        <section style="margin-bottom:2rem">
+          <h2 style="font-size:1.25rem;margin-bottom:0.75rem">Load shared code</h2>
+          <p style="color:var(--text-dim);margin-bottom:0.75rem;font-size:0.9rem">Paste a Code Share link to load and download the code.</p>
+          <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+            <input type="text" id="share-url" placeholder="Paste share link (or #share/... from URL)" style="flex:1;min-width:200px;padding:0.6rem;border:1px solid var(--border);border-radius:8px;font:inherit">
+            <button class="btn btn-secondary" id="share-load">Load</button>
+          </div>
+          <div id="share-loaded" style="margin-top:1rem;display:none">
+            <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:1rem;margin-top:0.5rem">
+              <h3 id="share-loaded-title" style="margin-bottom:0.5rem"></h3>
+              <pre id="share-loaded-code" style="background:var(--bg);padding:1rem;border-radius:6px;overflow-x:auto;font-size:0.85rem;max-height:200px;overflow-y:auto"></pre>
+              <div style="margin-top:0.75rem;display:flex;gap:0.5rem">
+                <button class="btn btn-primary" id="share-open-free">Open in Free Code</button>
+                <button class="btn btn-secondary" id="share-download">Download</button>
+              </div>
+            </div>
+          </div>
+          <div id="share-load-msg" style="margin-top:0.5rem;font-size:0.9rem;color:var(--error)"></div>
+        </section>
+
+        <section>
+          <h2 style="font-size:1.25rem;margin-bottom:0.75rem">Browse shared</h2>
+          <p style="color:var(--text-dim);margin-bottom:0.75rem;font-size:0.9rem">Sample snippets you can load and download. Share your own via the Publish section above.</p>
+          <div class="lesson-list" id="share-examples"></div>
+        </section>
+      </main>
+    `;
+
+    const titleInput = el.querySelector('#share-title');
+    const langSelect = el.querySelector('#share-lang');
+    const codeInput = el.querySelector('#share-code');
+    const publishBtn = el.querySelector('#share-publish');
+    const publishMsg = el.querySelector('#share-publish-msg');
+    const urlInput = el.querySelector('#share-url');
+    const loadBtn = el.querySelector('#share-load');
+    const loadedDiv = el.querySelector('#share-loaded');
+    const loadedTitle = el.querySelector('#share-loaded-title');
+    const loadedCode = el.querySelector('#share-loaded-code');
+    const openFreeBtn = el.querySelector('#share-open-free');
+    const downloadBtn = el.querySelector('#share-download');
+    const loadMsg = el.querySelector('#share-load-msg');
+
+    let loadedSnippet = null;
+
+    publishBtn.addEventListener('click', () => {
+      const title = titleInput.value.trim() || 'Untitled';
+      const code = codeInput.value;
+      const lang = langSelect.value;
+      if (!code.trim()) {
+        publishMsg.textContent = 'Add some code first.';
+        publishMsg.style.color = 'var(--error)';
+        return;
+      }
+      const data = { title, code, language: lang };
+      const enc = encodeShare(data);
+      if (!enc) {
+        publishMsg.textContent = 'Could not encode. Code may be too long for URL.';
+        publishMsg.style.color = 'var(--error)';
+        return;
+      }
+      const url = location.origin + location.pathname + '#share/' + enc;
+      navigator.clipboard.writeText(url).then(() => {
+        publishMsg.textContent = 'Link copied! Share it anywhere.';
+        publishMsg.style.color = 'var(--success)';
+      }).catch(() => {
+        publishMsg.textContent = 'Share link: ' + url.substring(0, 80) + '...';
+        publishMsg.style.color = 'var(--text-dim)';
+      });
+      urlInput.value = url;
+    });
+
+    function showLoaded(snippet) {
+      loadedSnippet = snippet;
+      loadedTitle.textContent = snippet.title;
+      loadedCode.textContent = snippet.code;
+      loadedDiv.style.display = 'block';
+      loadMsg.textContent = '';
+    }
+
+    loadBtn.addEventListener('click', () => {
+      let raw = urlInput.value.trim();
+      if (!raw) {
+        const hash = location.hash;
+        if (hash.startsWith('#share/')) raw = location.origin + location.pathname + hash;
+      }
+      if (!raw) {
+        loadMsg.textContent = 'Paste a share link or use a link with #share/ in the URL.';
+        return;
+      }
+      const match = raw.match(/#share\/([A-Za-z0-9_-]+)/) || raw.match(/share\/([A-Za-z0-9_-]+)/);
+      const enc = match ? match[1] : raw.split('/').pop();
+      const decoded = decodeShare(enc);
+      if (!decoded || !decoded.code) {
+        loadMsg.textContent = 'Invalid or expired share link.';
+        loadedDiv.style.display = 'none';
+        return;
+      }
+      showLoaded({ title: decoded.title || 'Untitled', code: decoded.code, language: decoded.language || 'javascript' });
+    });
+
+    openFreeBtn.addEventListener('click', () => {
+      if (!loadedSnippet) return;
+      state.language = loadedSnippet.language;
+      state.freeCodeContent = loadedSnippet.code;
+      const lang = loadedSnippet.language;
+      localStorage.setItem('code_freeCode_' + lang, loadedSnippet.code);
+      state.view = 'freeCode';
+      state.mode = 'freeCode';
+      render();
+    });
+
+    downloadBtn.addEventListener('click', () => {
+      if (!loadedSnippet) return;
+      const ext = FILE_EXTENSIONS[loadedSnippet.language] || 'txt';
+      const blob = new Blob([loadedSnippet.code], { type: 'text/plain' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = (loadedSnippet.title || 'code').replace(/\s+/g, '-') + '.' + ext;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+
+    const examplesList = el.querySelector('#share-examples');
+    CODE_SHARE_EXAMPLES.forEach((ex, i) => {
+      const card = document.createElement('div');
+      card.className = 'lesson-card';
+      card.innerHTML = `
+        <div class="lesson-title">${escapeHtml(ex.title)}</div>
+        <div class="lesson-preview">${escapeHtml(ex.code.substring(0, 60))}...</div>
+        <div style="margin-top:0.5rem;display:flex;gap:0.5rem">
+          <button class="btn btn-primary btn-sm" data-load-example data-i="${i}">Load</button>
+          <button class="btn btn-secondary btn-sm" data-download-example data-i="${i}">Download</button>
+        </div>
+      `;
+      card.querySelector('[data-load-example]').addEventListener('click', () => showLoaded(ex));
+      card.querySelector('[data-download-example]').addEventListener('click', () => {
+        const ext = FILE_EXTENSIONS[ex.language] || 'txt';
+        const blob = new Blob([ex.code], { type: 'text/plain' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = (ex.title || 'code').replace(/\s+/g, '-') + '.' + ext;
+        a.click();
+        URL.revokeObjectURL(a.href);
+      });
+      examplesList.appendChild(card);
+    });
+
+    el.querySelector('[data-back]').addEventListener('click', () => {
+      state.view = 'welcome';
+      state.mode = null;
+      render();
+    });
+
+    if (location.hash.startsWith('#share/')) {
+      const enc = location.hash.slice(7);
+      const decoded = decodeShare(enc);
+      if (decoded && decoded.code) {
+        urlInput.value = location.href;
+        showLoaded({ title: decoded.title || 'Untitled', code: decoded.code, language: decoded.language || 'javascript' });
+      }
+    }
 
     return el;
   }
