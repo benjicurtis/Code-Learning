@@ -340,11 +340,15 @@
     } catch (e) { return null; }
   }
 
-  const CODE_SHARE_EXAMPLES = [
-    { title: 'Hello World (JS)', language: 'javascript', code: 'console.log("Hello, World!");' },
-    { title: 'Counter (HTML)', language: 'html', code: '<!DOCTYPE html>\n<html>\n<body>\n  <p>Count: <span id="n">0</span></p>\n  <button onclick="document.getElementById(\'n\').innerText++">+</button>\n</body>\n</html>' },
-    { title: 'Greet function (Python)', language: 'python', code: 'def greet(name):\n    return f"Hello, {name}!"\nprint(greet("World"))' }
-  ];
+  function getPublishedList() {
+    try {
+      const raw = localStorage.getItem('code_published');
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) { return []; }
+  }
+  function savePublishedList(list) {
+    localStorage.setItem('code_published', JSON.stringify(list));
+  }
 
   function renderCodeShare() {
     const draft = state.shareDraft || {};
@@ -378,6 +382,12 @@
         </section>
 
         <section style="margin-bottom:2rem">
+          <h2 style="font-size:1.25rem;margin-bottom:0.75rem">Your published code</h2>
+          <p style="color:var(--text-dim);margin-bottom:0.75rem;font-size:0.9rem">Code you have published. Copy the link again, load, or remove.</p>
+          <div id="share-published-list" class="lesson-list"></div>
+        </section>
+
+        <section style="margin-bottom:2rem">
           <h2 style="font-size:1.25rem;margin-bottom:0.75rem">Load shared code</h2>
           <p style="color:var(--text-dim);margin-bottom:0.75rem;font-size:0.9rem">Paste a Code Share link to load and download the code.</p>
           <div style="display:flex;gap:0.5rem;flex-wrap:wrap">
@@ -395,12 +405,6 @@
             </div>
           </div>
           <div id="share-load-msg" style="margin-top:0.5rem;font-size:0.9rem;color:var(--error)"></div>
-        </section>
-
-        <section>
-          <h2 style="font-size:1.25rem;margin-bottom:0.75rem">Browse shared</h2>
-          <p style="color:var(--text-dim);margin-bottom:0.75rem;font-size:0.9rem">Sample snippets you can load and download. Share your own via the Publish section above.</p>
-          <div class="lesson-list" id="share-examples"></div>
         </section>
       </main>
     `;
@@ -421,6 +425,54 @@
 
     let loadedSnippet = null;
 
+    function renderPublishedList(containerEl) {
+      const listEl = containerEl.querySelector('#share-published-list');
+      const list = getPublishedList();
+      listEl.innerHTML = '';
+      if (list.length === 0) {
+        listEl.innerHTML = '<p style="color:var(--text-dim);font-size:0.9rem">No code published yet. Publish using the form above.</p>';
+        return;
+      }
+      list.forEach((item, i) => {
+        const card = document.createElement('div');
+        card.className = 'lesson-card';
+        card.innerHTML = `
+          <div class="lesson-title">${escapeHtml(item.title)}</div>
+          <div class="lesson-preview">${escapeHtml(item.code.substring(0, 80))}${item.code.length > 80 ? '...' : ''}</div>
+          <div style="margin-top:0.5rem;font-size:0.8rem;color:var(--text-dim)">${TRACK_NAMES[item.language] || item.language}</div>
+          <div style="margin-top:0.5rem;display:flex;gap:0.5rem;flex-wrap:wrap">
+            <button class="btn btn-secondary btn-sm" data-copy-link data-i="${i}">Copy link</button>
+            <button class="btn btn-secondary btn-sm" data-load-pub data-i="${i}">Load</button>
+            <button class="btn btn-secondary btn-sm" data-download-pub data-i="${i}">Download</button>
+            <button class="btn btn-secondary btn-sm" data-remove-pub data-i="${i}" style="color:var(--error)">Remove</button>
+          </div>
+        `;
+        card.querySelector('[data-copy-link]').addEventListener('click', () => {
+          navigator.clipboard.writeText(item.shareUrl);
+        });
+        card.querySelector('[data-load-pub]').addEventListener('click', () => {
+          showLoaded({ title: item.title, code: item.code, language: item.language });
+        });
+        card.querySelector('[data-download-pub]').addEventListener('click', () => {
+          const ext = FILE_EXTENSIONS[item.language] || 'txt';
+          const blob = new Blob([item.code], { type: 'text/plain' });
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(blob);
+          a.download = (item.title || 'code').replace(/\s+/g, '-') + '.' + ext;
+          a.click();
+          URL.revokeObjectURL(a.href);
+        });
+        card.querySelector('[data-remove-pub]').addEventListener('click', () => {
+          const updated = getPublishedList().filter((_, idx) => idx !== i);
+          savePublishedList(updated);
+          renderPublishedList(containerEl);
+        });
+        listEl.appendChild(card);
+      });
+    }
+
+    renderPublishedList(el);
+
     publishBtn.addEventListener('click', () => {
       const title = titleInput.value.trim() || 'Untitled';
       const code = codeInput.value;
@@ -438,6 +490,12 @@
         return;
       }
       const url = location.origin + location.pathname + '#share/' + enc;
+      const item = { id: Date.now().toString(36), title, code, language: lang, shareUrl: url, date: new Date().toISOString() };
+      const list = getPublishedList();
+      list.unshift(item);
+      savePublishedList(list);
+      renderPublishedList(el);
+
       navigator.clipboard.writeText(url).then(() => {
         publishMsg.textContent = 'Link copied! Share it anywhere.';
         publishMsg.style.color = 'var(--success)';
@@ -497,31 +555,6 @@
       a.download = (loadedSnippet.title || 'code').replace(/\s+/g, '-') + '.' + ext;
       a.click();
       URL.revokeObjectURL(a.href);
-    });
-
-    const examplesList = el.querySelector('#share-examples');
-    CODE_SHARE_EXAMPLES.forEach((ex, i) => {
-      const card = document.createElement('div');
-      card.className = 'lesson-card';
-      card.innerHTML = `
-        <div class="lesson-title">${escapeHtml(ex.title)}</div>
-        <div class="lesson-preview">${escapeHtml(ex.code.substring(0, 60))}...</div>
-        <div style="margin-top:0.5rem;display:flex;gap:0.5rem">
-          <button class="btn btn-primary btn-sm" data-load-example data-i="${i}">Load</button>
-          <button class="btn btn-secondary btn-sm" data-download-example data-i="${i}">Download</button>
-        </div>
-      `;
-      card.querySelector('[data-load-example]').addEventListener('click', () => showLoaded(ex));
-      card.querySelector('[data-download-example]').addEventListener('click', () => {
-        const ext = FILE_EXTENSIONS[ex.language] || 'txt';
-        const blob = new Blob([ex.code], { type: 'text/plain' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = (ex.title || 'code').replace(/\s+/g, '-') + '.' + ext;
-        a.click();
-        URL.revokeObjectURL(a.href);
-      });
-      examplesList.appendChild(card);
     });
 
     el.querySelector('[data-back]').addEventListener('click', () => {
